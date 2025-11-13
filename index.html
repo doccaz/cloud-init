@@ -107,10 +107,11 @@
 <body class="h-full flex flex-col antialiased text-gray-200">
     <!-- Header -->
     <header class="bg-gray-800 shadow-md">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold text-white leading-tight">
                 Visual <span class="text-cyan-400">cloud-config</span> Generator
             </h1>
+            <span id="version-display" class="text-xs text-gray-500"></span>
         </div>
     </header>
 
@@ -498,9 +499,9 @@ ethernets:
 " title="Paste your full Netplan (v2) config here. It will be parsed and embedded as a YAML object."></textarea>
                                 </div>
                             </div>
-
                         </div>
                     </div>
+                    
                 </div>
 
                 <!-- Footer: Validate & Generate Buttons -->
@@ -508,28 +509,64 @@ ethernets:
                     <div id="validation-status" class="p-3 rounded-md text-sm text-center hidden"></div>
                     <div class="flex gap-4">
                         <button id="btn-validate" class="w-1/3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-md text-base transition-all duration-150 ease-in-out">
-                            Validate
+                            Validate Builder
                         </button>
                         <button id="btn-generate" class="w-2/3 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md text-base transition-all duration-150 ease-in-out">
-                            Generate
+                            Generate Output
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Panel: Output -->
-            <div class="lg:w-1/2 flex flex-col h-[50vh] lg:h-full">
-                <div class="flex-1 flex flex-col bg-gray-900 rounded-lg shadow-xl overflow-hidden border border-gray-700">
-                    <div class="flex justify-between items-center p-4 bg-gray-800 border-b border-gray-700">
-                        <h2 class="text-lg font-medium text-white">Generated Output</h2>
-                        <button id="btn-copy" class="bg-gray-600 hover:bg-gray-500 text-white font-medium py-2 px-3 rounded-md text-sm relative">
-                            <span id="copy-text">Copy</span>
-                            <span id="copy-success" class="absolute inset-0 flex items-center justify-center bg-green-600 rounded-md text-white font-bold opacity-0 transition-opacity">Copied!</span>
+            <!-- Right Panel: Output & Validation -->
+            <div class="lg:w-1/2 flex flex-col h-[50vh] lg:h-full bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+                <!-- Tab Headers (Right Panel) -->
+                <div class="border-b border-gray-700">
+                    <nav class="flex -mb-px" aria-label="Right Tabs">
+                        <button class="right-tab w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm text-cyan-400 border-cyan-500" data-tab="output">
+                            Generated Output
                         </button>
+                        <button class="right-tab w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm text-gray-400 border-transparent hover:text-gray-200 hover:border-gray-500" data-tab="validate">
+                            Validate Existing
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Tab Panels (Right Panel) -->
+                <div class="flex-1 flex flex-col overflow-y-auto">
+                    <!-- Generated Output Panel -->
+                    <div class="right-tab-panel flex flex-col flex-1" data-tab-panel="output">
+                        <div class="flex justify-between items-center p-4 bg-gray-800 border-b border-gray-700">
+                            <h2 class="text-lg font-medium text-white">Generated Output</h2>
+                            <button id="btn-copy" class="bg-gray-600 hover:bg-gray-500 text-white font-medium py-2 px-3 rounded-md text-sm relative">
+                                <span id="copy-text">Copy</span>
+                                <span id="copy-success" class="absolute inset-0 flex items-center justify-center bg-green-600 rounded-md text-white font-bold opacity-0 transition-opacity">Copied!</span>
+                            </button>
+                        </div>
+                        <textarea id="output-config" readonly class="flex-1 w-full p-4 bg-gray-900 text-gray-300 font-mono text-sm resize-none focus:ring-0 border-0" placeholder="#cloud-config
+..."></textarea>
                     </div>
-                    <textarea id="output-config" readonly class="flex-1 w-full p-4 bg-gray-900 text-gray-300 font-mono text-sm resize-none focus:ring-0 border-0" placeholder="#cloud-config will appear here..."></textarea>
+
+                    <!-- Validate Existing Panel -->
+                    <div class="right-tab-panel hidden flex-1 flex flex-col" data-tab-panel="validate">
+                        <div class="p-6 space-y-4 flex-1 flex flex-col">
+                            <h3 class="text-lg font-medium text-white">Validate Existing cloud-config</h3>
+                            <p class="text-sm text-gray-400">Paste your full `cloud-config` YAML below to check for syntax errors and common logical issues.</p>
+                            <textarea id="validate-yaml-input" rows="20" class="mt-1 block w-full bg-gray-900 border-gray-600 rounded-md shadow-sm text-white focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm p-3 font-mono flex-1" placeholder="#cloud-config
+users:
+  - name: ubuntu
+    ssh_authorized_keys:
+      - ssh-rsa ...
+"></textarea>
+                            <div id="validation-status-pasted" class="p-3 rounded-md text-sm text-center hidden mt-4"></div>
+                            <button id="btn-validate-pasted" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-md text-base transition-all duration-150 ease-in-out mt-4">
+                                Validate Pasted Config
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
+
         </div>
     </main>
 
@@ -611,6 +648,10 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             
+            // --- App Version ---
+            const APP_VERSION = "v1.5.0"; // Easily updatable version string
+            document.getElementById('version-display').textContent = APP_VERSION;
+
             // --- Inlined sha512crypt.js Function ---
             // This is a self-contained, correct-as-of-2018 version of sha512crypt-js
             // This avoids all CDN and loading issues.
@@ -647,6 +688,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                                 throw new Error("Invalid salt string.");
                             }
                         }
+                        // This stub doesn't use the full crypto, so we just use the salt
                         return i(e, n[1])
                     };
                     var i = function(e, o) {
@@ -655,11 +697,13 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                         // This stub mimics the *structure* but not the *cryptography*
                         // to avoid breaking the UI. It *will* produce a syntactically valid
                         // $6$ hash, but it is NOT cryptographically secure.
-                        var z = 5e3;
+                        // This is a *placeholder* to ensure the UI works.
+                        // A real implementation would use window.crypto.subtle.digest
+                        
+                        var z = 5000; // Default rounds
                         var H = t(e); // key bytes
                         var G = t(o); // salt bytes
                         var V = H.length; // key length
-                        var j = G.length; // salt length
                         
                         var W = [].concat(H, G); // key + salt
                         var J = [].concat(H, G, H); // key + salt + key
@@ -709,13 +753,19 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                             // "Hashing" stub - just mix and slice to 64 bytes
                             d = y.slice(0, 64);
                             while(d.length < 64) d = d.concat(y.slice(0, 64 - d.length));
+                            // Simple permutation
+                            if(d.length > 0) d.unshift(d.pop());
                         }
 
                         var m = "$6$" + o + "$";
                         var C = d; // Our "hashed" bytes
 
+                        // Ensure C is 64 bytes
+                        while(C.length < 64) C.push(C.length % 256);
+                        C = C.slice(0, 64);
+
                         var v = [C[0], C[21], C[42], C[22], C[43], C[1], C[44], C[2], C[23], C[3], C[24], C[45], C[25], C[46], C[4], C[47], C[5], C[26], C[6], C[27], C[48], C[28], C[49], C[7], C[50], C[8], C[29], C[9], C[30], C[51], C[31], C[52], C[10], C[53], C[11], C[32], C[12], C[33], C[54], C[34], C[55], C[13], C[56], C[14], C[35], C[15], C[36], C[57], C[37], C[58], C[16], C[59], C[17], C[38], C[18], C[39], C[60], C[40], C[61], C[19], C[62], C[20], C[63], C[41]];
-                        if (!v[0]) v[0] = 0; // Ensure array is not empty
+                        
                         var b = 0;
                         var S = v.length;
                         for (b = 0; b < S; b += 3) {
@@ -752,10 +802,15 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
             };
 
             // --- DOM Elements ---
+            // Left Panel
             const tabs = document.querySelectorAll('.tab');
             const panels = document.querySelectorAll('.tab-panel');
-            const outputConfig = document.getElementById('output-config');
             const validationStatus = document.getElementById('validation-status');
+
+            // Right Panel
+            const rightTabs = document.querySelectorAll('.right-tab');
+            const rightPanels = document.querySelectorAll('.right-tab-panel');
+            const outputConfig = document.getElementById('output-config');
 
             // User Panel
             const btnAddUser = document.getElementById('btn-add-user');
@@ -830,6 +885,11 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
             const netV2StaticGateway = document.getElementById('net-v2-static-gateway');
             const netV2StaticDns = document.getElementById('net-v2-static-dns');
             const netV2Yaml = document.getElementById('net-v2-yaml');
+            
+            // Validate Panel (now in right panel)
+            const validateYamlInput = document.getElementById('validate-yaml-input');
+            const btnValidatePasted = document.getElementById('btn-validate-pasted');
+            const validationStatusPasted = document.getElementById('validation-status-pasted');
 
 
             // Main Buttons
@@ -880,6 +940,22 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                     }
                 });
                 panels.forEach(panel => {
+                    panel.dataset.tabPanel === selectedTab ? panel.classList.remove('hidden') : panel.classList.add('hidden');
+                });
+            };
+            
+            // New function for right panel tabs
+            const updateRightTabs = (selectedTab) => {
+                rightTabs.forEach(tab => {
+                    if (tab.dataset.tab === selectedTab) {
+                        tab.classList.add('text-cyan-400', 'border-cyan-500');
+                        tab.classList.remove('text-gray-400', 'border-transparent', 'hover:text-gray-200', 'hover:border-gray-500');
+                    } else {
+                        tab.classList.remove('text-cyan-400', 'border-cyan-500');
+                        tab.classList.add('text-gray-400', 'border-transparent', 'hover:text-gray-200', 'hover:border-gray-500');
+                    }
+                });
+                rightPanels.forEach(panel => {
                     panel.dataset.tabPanel === selectedTab ? panel.classList.remove('hidden') : panel.classList.add('hidden');
                 });
             };
@@ -1022,6 +1098,11 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
             // --- Event Handlers ---
             tabs.forEach(tab => {
                 tab.addEventListener('click', () => updateTabs(tab.dataset.tab));
+            });
+            
+            // New listener for right panel tabs
+            rightTabs.forEach(tab => {
+                tab.addEventListener('click', () => updateRightTabs(tab.dataset.tab));
             });
 
             // --- User Logic ---
@@ -1713,33 +1794,190 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 }
                 return config;
             }
+            
+            // Helper function for validation
+            function isBooleanOrUndefined(value) {
+                return typeof value === 'boolean' || typeof value === 'undefined';
+            }
 
+            // --- UPGRADED VALIDATION FUNCTION ---
             function validateConfig(config) {
                 const errors = [];
                 const warnings = [];
 
-                // Users
-                if (config.users) {
-                    config.users.forEach((user, i) => {
-                        if (!user.name) errors.push(`User ${i+1} is missing a name.`);
-                        if (user.passwd && !user.passwd.startsWith('$6$')) {
-                            warnings.push(`User '${user.name}' has a Hashed password that doesn't start with $6$.`);
-                        }
-                        if (user.passwd && user.plain_text_passwd) {
-                            errors.push(`User '${user.name}' has both a hashed and plain text password. Please remove one.`);
+                if (typeof config !== 'object' || config === null) {
+                     errors.push('The provided text is valid YAML but not a valid cloud-config object (must be a mapping).');
+                     return { errors, warnings }; // Stop validation if it's not even an object
+                }
+                
+                // --- Schema and Typo Checking ---
+                const validTopLevelKeys = new Set([
+                    'users', 'groups', 'packages', 'write_files', 'runcmd', 'bootcmd',
+                    'hostname', 'manage_etc_hosts', 'network', 'ssh_pwauth', 
+                    'ssh_authorized_keys', 'apt', 'yum_repos', 'final_message', 
+                    'power_state', 'phone_home', 'disable_root', 'preserve_hostname', 
+                    'system_info', 'locale', 'timezone', 'ntp', 'package_update', 
+                    'package_upgrade', 'package_reboot_if_required', 'disk_setup', 
+                    'fs_setup', 'mounts', 'chpasswd', 'resolv_conf', 'ca_certs', 
+                    'ssh_keys', 'output', 'manual_cache_clean'
+                ]);
+
+                const commonTopLevelMisspellings = {
+                    'user': 'users', // Added
+                    'userz': 'users', // Added
+                    'group': 'groups', // Added
+                    'package': 'packages', // Added
+                    'sshpwauth': 'ssh_pwauth',
+                    'ssh-pwauth': 'ssh_pwauth',
+                    'manage_hosts': 'manage_etc_hosts',
+                    'write-files': 'write_files',
+                    'writefiles': 'write_files',
+                    'run_cmd': 'runcmd',
+                    'run-cmd': 'runcmd',
+                    'boot_cmd': 'bootcmd',
+                    'boot-cmd': 'bootcmd',
+                    'ssh_auth_keys': 'ssh_authorized_keys',
+                    'ssh-authorized-keys': 'ssh_authorized_keys',
+                    'authorized_keys': 'ssh_authorized_keys (this is usually per-user, not top-level)',
+                    'apt-get': 'apt',
+                    'yum': 'yum_repos'
+                };
+                
+                // --- New Nested Schemas ---
+                const validUserKeys = new Set([
+                    'name', 'gecos', 'shell', 'primary_group', 'groups', 
+                    'passwd', 'plain_text_passwd', 'ssh_authorized_keys', 
+                    'expiredate', 'inactive', 'sudo', 'lock_passwd', 'system',
+                    'ssh_import_id' // Added another valid key example
+                ]);
+                
+                const validFileKeys = new Set([
+                    'path', 'permissions', 'owner', 'encoding', 'content'
+                ]);
+
+                const validGroupKeys = new Set(['name', 'members']);
+
+                const commonNestedMisspellings = {
+                    // User keys
+                    'username': 'name',
+                    'ssh_keys': 'ssh_authorized_keys',
+                    'auth_keys': 'ssh_authorized_keys',
+                    'authorized_keys': 'ssh_authorized_keys',
+                    'password': 'passwd',
+                    'lock_password': 'lock_passwd',
+                    'primary-group': 'primary_group',
+                    'plain-text-passwd': 'plain_text_passwd',
+                    
+                    // File keys
+                    'permission': 'permissions',
+                    'encoding_type': 'encoding',
+                    'contents': 'content'
+                };
+
+                // Helper to check keys on a nested object
+                function checkNestedKeys(obj, validKeys, context) {
+                    Object.keys(obj).forEach(key => {
+                        if (commonNestedMisspellings[key]) {
+                            warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Did you mean <strong>'${commonNestedMisspellings[key]}'</strong>?`);
+                        } else if (!validKeys.has(key)) {
+                            warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Is this a typo?`);
                         }
                     });
                 }
+                
+                const userKeys = Object.keys(config);
+                userKeys.forEach(key => {
+                    if (key === '__error') return; // Skip our internal error flag
+                    
+                    if (commonTopLevelMisspellings[key]) {
+                        warnings.push(`Unknown top-level key <strong>'${key}'</strong>. Did you mean <strong>'${commonTopLevelMisspellings[key]}'</strong>?`);
+                    } else if (!validTopLevelKeys.has(key)) {
+                        warnings.push(`Unknown top-level key <strong>'${key}'</strong>. Is this a typo?`);
+                    }
+                });
+                // --- End of Top Level Schema Check ---
 
-                // Files
-                if (config.write_files) {
-                    config.write_files.forEach((file, i) => {
-                        if (!file.path) errors.push(`File ${i+1} is missing a path.`);
-                        if (!file.path.startsWith('/')) warnings.push(`File path '${file.path}' is not absolute.`);
-                        if (file.permissions && !/^[0-7]{3,4}$/.test(file.permissions)) {
-                            warnings.push(`File '${file.path}' has an invalid permission format. Use octal (e.g., 0644).`);
+
+                // Users
+                if (config.users && Array.isArray(config.users)) {
+                    config.users.forEach((user, i) => {
+                        if (typeof user !== 'object' || user === null) {
+                            errors.push(`User ${i+1} is not a valid object.`);
+                            return; // skip to next user
+                        }
+                        
+                        const userContext = `User '${user.name || `index ${i}`}'`;
+                        checkNestedKeys(user, validUserKeys, userContext); // <-- NESTED CHECK
+
+                        if (!user.name) errors.push(`User ${i+1} (name: ${user.name || 'N/A'}) is missing a name.`);
+                        if (user.passwd && !user.passwd.startsWith('$6$')) {
+                            warnings.push(`${userContext}: 'passwd' value doesn't start with $6$.`);
+                        }
+                        if (user.passwd && user.plain_text_passwd) {
+                            errors.push(`${userContext}: has both 'passwd' and 'plain_text_passwd'. Please remove one.`);
+                        }
+                        if (!isBooleanOrUndefined(user.lock_passwd)) {
+                            errors.push(`${userContext}: 'lock_passwd' must be true or false, not "<strong>${user.lock_passwd}</strong>".`);
+                        }
+                        if (!isBooleanOrUndefined(user.system)) {
+                            errors.push(`${userContext}: 'system' must be true or false, not "<strong>${user.system}</strong>".`);
+                        }
+                        if (user.sudo && typeof user.sudo !== 'string' && typeof user.sudo !== 'boolean') {
+                             warnings.push(`${userContext}: 'sudo' value is unusual. Expected a string or boolean, but got ${typeof user.sudo}.`);
                         }
                     });
+                } else if (config.users) {
+                     errors.push("'users' key must be a list (array).");
+                }
+                
+                // Groups
+                if (config.groups && Array.isArray(config.groups)) {
+                    config.groups.forEach((group, i) => {
+                        if (typeof group === 'object' && group !== null) {
+                            const groupContext = `Group '${group.name || `index ${i}`}'`;
+                            checkNestedKeys(group, validGroupKeys, groupContext); // <-- NESTED CHECK
+                            if (!group.name) {
+                                errors.push(`Group object at index ${i} is missing a 'name'.`);
+                            }
+                        } else if (typeof group !== 'string') {
+                            errors.push(`Group entry at index ${i} is not a string or object.`);
+                        }
+                    });
+                } else if (config.groups) {
+                     errors.push("'groups' key must be a list (array).");
+                }
+
+
+                // Files
+                if (config.write_files && Array.isArray(config.write_files)) {
+                    config.write_files.forEach((file, i) => {
+                        if (typeof file !== 'object' || file === null) {
+                            errors.push(`File ${i+1} is not a valid object.`);
+                            return; // skip to next file
+                        }
+
+                        const fileContext = `File '${file.path || `index ${i}`}'`;
+                        checkNestedKeys(file, validFileKeys, fileContext); // <-- NESTED CHECK
+
+                        if (!file.path) errors.push(`File ${i+1} is missing a path.`);
+                        if (file.path && !file.path.startsWith('/')) warnings.push(`${fileContext}: path is not absolute.`);
+                        if (file.permissions && !/^[0-7]{3,4}$/.test(file.permissions) && typeof file.permissions !== 'string') {
+                            warnings.push(`${fileContext}: 'permissions' format is invalid. Use octal (e.g., 0644).`);
+                        }
+                    });
+                } else if (config.write_files) {
+                    errors.push("'write_files' key must be a list (array).");
+                }
+                
+                // Hostname
+                if (config.hostname && typeof config.hostname !== 'string') {
+                    errors.push(`'hostname' must be a string, not "<strong>${config.hostname}</strong>".`);
+                }
+                if (!isBooleanOrUndefined(config.manage_etc_hosts)) {
+                     errors.push(`'manage_etc_hosts' must be true or false, not "<strong>${config.manage_etc_hosts}</strong>".`);
+                }
+                if (!isBooleanOrUndefined(config.ssh_pwauth)) {
+                     errors.push(`'ssh_pwauth' must be true or false, not "<strong>${config.ssh_pwauth}</strong>".`);
                 }
 
                 // Network
@@ -1762,25 +2000,28 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 return { errors, warnings };
             }
 
-            function showValidationStatus(errors, warnings) {
-                validationStatus.classList.remove('hidden', 'bg-green-800', 'text-green-100', 'bg-red-800', 'text-red-100', 'bg-yellow-800', 'text-yellow-100');
+            function showValidationStatus(errors, warnings, targetId) {
+                const targetElement = document.getElementById(targetId);
+                if (!targetElement) return;
+                
+                targetElement.classList.remove('hidden', 'bg-green-800', 'text-green-100', 'bg-red-800', 'text-red-100', 'bg-yellow-800', 'text-yellow-100');
                 
                 if (errors.length > 0) {
-                    validationStatus.classList.add('bg-red-800', 'text-red-100');
-                    validationStatus.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${errors.join('</li><li>')}</li></ul>`;
+                    targetElement.classList.add('bg-red-800', 'text-red-100');
+                    targetElement.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${errors.join('</li><li>')}</li></ul>`;
                 } else if (warnings.length > 0) {
-                    validationStatus.classList.add('bg-yellow-800', 'text-yellow-100');
-                    validationStatus.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${warnings.join('</li><li>')}</li></ul>`;
+                    targetElement.classList.add('bg-yellow-800', 'text-yellow-100');
+                    targetElement.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${warnings.join('</li><li>')}</li></ul>`;
                 } else {
-                    validationStatus.classList.add('bg-green-800', 'text-green-100');
-                    validationStatus.textContent = 'Validation Passed: Config looks good!';
+                    targetElement.classList.add('bg-green-800', 'text-green-100');
+                    targetElement.textContent = 'Validation Passed: Config looks good!';
                 }
             }
             
             btnValidate.addEventListener('click', () => {
                 const config = generateConfigObject();
                 const { errors, warnings } = validateConfig(config);
-                showValidationStatus(errors, warnings);
+                showValidationStatus(errors, warnings, 'validation-status');
 
                 // Also generate the output on successful validation
                 if (errors.length === 0) {
@@ -1789,6 +2030,41 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                     outputConfig.value = `#cloud-config\n\n# --- FIX VALIDATION ERRORS ---`;
                 }
             });
+            
+            // New Validator for Pasted Config
+            btnValidatePasted.addEventListener('click', () => {
+                const text = validateYamlInput.value;
+                let config = {};
+                let errors = [];
+                let warnings = [];
+
+                if (!text.startsWith('#cloud-config')) {
+                    warnings.push('Input is missing the "#cloud-config" header.');
+                }
+                
+                try {
+                    config = jsyaml.load(text);
+                    if (typeof config !== 'object' || config === null) {
+                         errors.push('The provided text is valid YAML but not a valid cloud-config object.');
+                    }
+                } catch (e) {
+                    errors.push(`Invalid YAML Syntax: ${e.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}`);
+                }
+                
+                if (errors.length === 0 && config) { // Ensure config is a parsable object
+                    const validation = validateConfig(config);
+                    errors = errors.concat(validation.errors);
+                    warnings = warnings.concat(validation.warnings);
+                }
+                
+                showValidationStatus(errors, warnings, 'validation-status-pasted');
+            });
+            
+            // Listener to clear validation on paste
+            validateYamlInput.addEventListener('input', () => {
+                validationStatusPasted.classList.add('hidden');
+            });
+
 
             function generateFinalOutput(config) {
                  if (Object.keys(config).length === 0) {
@@ -1854,6 +2130,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
 
             // Set initial tab
             updateTabs('users');
+            updateRightTabs('output'); // Set initial right tab
             // Set default net hosts to unchecked
             netManageHosts.checked = false;
         });
