@@ -649,7 +649,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
         document.addEventListener('DOMContentLoaded', () => {
             
             // --- App Version ---
-            const APP_VERSION = "v1.8.0"; // Updated version for new validator
+            const APP_VERSION = "v1.8.1"; // Patched validator
             document.getElementById('version-display').textContent = APP_VERSION;
 
             // --- Inlined sha512crypt.js Function ---
@@ -1790,12 +1790,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 return config;
             }
             
-            // Helper function for validation
-            function isBooleanOrUndefined(value) {
-                return typeof value === 'boolean' || typeof value === 'undefined';
-            }
-
-            // --- V2 VALIDATION ENGINE ---
+            // --- FULL SCHEMA VALIDATION ENGINE ---
             
             // Schema definition for common cloud-init modules
             const CLOUD_CONFIG_SCHEMA = {
@@ -1877,7 +1872,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 'disk_setup': { type: 'object' }, 
                 'fs_setup': { type: 'list' }, 
                 'mounts': { type: 'list' }, 
-                'chpasswd': { // <-- ADDED THIS BLOCK
+                'chpasswd': { 
                     type: 'object',
                     schema: {
                         'expire': { type: 'boolean' },
@@ -1904,7 +1899,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
 
             function validateSchemaRecursive(config, schema, context, errors, warnings) {
                 if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-                    errors.push(`'${context}' is not a valid object/mapping.`);
+                    errors.push(`'${sanitizeString(context)}' is not a valid object/mapping.`);
                     return;
                 }
 
@@ -1914,18 +1909,19 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 for (const key in config) {
                     if (config.hasOwnProperty(key)) {
                         const value = config[key];
+                        const sanitizedKey = sanitizeString(key);
 
                         // 1. Check if key is valid
                         if (validKeys.has(key)) {
                             const keySchema = schema[key];
-                            const keyContext = `${context}.${key}`;
+                            const keyContext = `${context}.${sanitizedKey}`;
                             
                             // 2. Check type
                             const expectedTypes = Array.isArray(keySchema.type) ? keySchema.type : [keySchema.type];
                             let actualType = Array.isArray(value) ? 'list' : (value === null ? 'null' : typeof value);
                             
                             if (!expectedTypes.includes(actualType)) {
-                                errors.push(`'${keyContext}': Invalid type. Expected <strong>${expectedTypes.join(' or ')}</strong> but got <strong>${actualType}</strong> (value: "${value}").`);
+                                errors.push(`'${keyContext}': Invalid type. Expected <strong>${expectedTypes.join(' or ')}</strong> but got <strong>${actualType}</strong> (value: "<strong>${sanitizeString(String(value))}</strong>").`);
                                 continue; // Stop checking this key if type is wrong
                             }
 
@@ -1959,13 +1955,13 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                             let foundSuggestion = false;
                             for (const validKey in schema) {
                                 if (schema[validKey].suggestions && schema[validKey].suggestions.includes(key)) {
-                                    warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Did you mean <strong>'${validKey}'</strong>?`);
+                                    warnings.push(`In ${context}: Unknown key <strong>'${sanitizedKey}'</strong>. Did you mean <strong>'${sanitizeString(validKey)}'</strong>?`);
                                     foundSuggestion = true;
                                     break;
                                 }
                             }
                             if (!foundSuggestion) {
-                                warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Is this a typo?`);
+                                warnings.push(`In ${context}: Unknown key <strong>'${sanitizedKey}'</strong>. Is this a typo?`);
                             }
                         }
                     }
@@ -1991,7 +1987,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 if (config.users && Array.isArray(config.users)) {
                     config.users.forEach((user, i) => {
                         if (typeof user !== 'object' || user === null) return; // Already handled by schema check
-                        const userContext = `User '${user.name || `index ${i}`}'`;
+                        const userContext = `User '<strong>${sanitizeString(user.name) || `index ${i}`}</strong>'`;
                         
                         // Required check
                         if (!user.name && user.name !== undefined) errors.push(`User ${i+1} is missing a required 'name'.`);
@@ -2010,7 +2006,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 if (config.write_files && Array.isArray(config.write_files)) {
                     config.write_files.forEach((file, i) => {
                         if (typeof file !== 'object' || file === null) return; 
-                        const fileContext = `File '${file.path || `index ${i}`}'`;
+                        const fileContext = `File '<strong>${sanitizeString(file.path) || `index ${i}`}</strong>'`;
                         
                         if (!file.path) errors.push(`File ${i+1} is missing a required 'path'.`);
                         if (file.path && !file.path.startsWith('/')) warnings.push(`${fileContext}: 'path' is not absolute.`);
@@ -2045,19 +2041,14 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 
                 targetElement.classList.remove('hidden', 'bg-green-800', 'text-green-100', 'bg-red-800', 'text-red-100', 'bg-yellow-800', 'text-yellow-100');
                 
-                // 1. Sanitize all messages first
-                const cleanErrors = errors.map(e => sanitizeString(e));
-                const cleanWarnings = warnings.map(w => sanitizeString(w));
+                // Messages are now pre-formatted with HTML and sanitized content
                 
-                // 2. Add emphasis to quoted text
-                const addEmphasis = (msg) => msg.replace(/'([^']*)'/g, "'<strong>$1</strong>'");
-
-                if (cleanErrors.length > 0) {
+                if (errors.length > 0) {
                     targetElement.classList.add('bg-red-800', 'text-red-100');
-                    targetElement.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${cleanErrors.map(addEmphasis).join('</li><li>')}</li></ul>`;
-                } else if (cleanWarnings.length > 0) {
+                    targetElement.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${errors.join('</li><li>')}</li></ul>`;
+                } else if (warnings.length > 0) {
                     targetElement.classList.add('bg-yellow-800', 'text-yellow-100');
-                    targetElement.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${cleanWarnings.map(addEmphasis).join('</li><li>')}</li></ul>`;
+                    targetElement.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${warnings.join('</li><li>')}</li></ul>`;
                 } else {
                     targetElement.classList.add('bg-green-800', 'text-green-100');
                     targetElement.textContent = 'Validation Passed: Config looks good!';
@@ -2085,7 +2076,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 let warnings = [];
 
                 if (!text.startsWith('#cloud-config')) {
-                    warnings.push('Input is missing the "#cloud-config" header.');
+                    warnings.push('Input is missing the "<strong>#cloud-config</strong>" header.');
                 }
                 
                 try {
@@ -2094,7 +2085,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                          errors.push('The provided text is valid YAML but not a valid cloud-config object.');
                     }
                 } catch (e) {
-                    errors.push(`Invalid YAML Syntax: ${e.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}`);
+                    errors.push(`Invalid YAML Syntax: ${sanitizeString(e.message)}`);
                 }
                 
                 if (errors.length === 0 && config) { // Ensure config is a parsable object
