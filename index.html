@@ -509,10 +509,10 @@ ethernets:
                     <div id="validation-status" class="p-3 rounded-md text-sm text-center hidden"></div>
                     <div class="flex gap-4">
                         <button id="btn-validate" class="w-1/3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-md text-base transition-all duration-150 ease-in-out">
-                            Validate Builder
+                            Validate Builder Form
                         </button>
                         <button id="btn-generate" class="w-2/3 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md text-base transition-all duration-150 ease-in-out">
-                            Generate Output
+                            Generate from Builder
                         </button>
                     </div>
                 </div>
@@ -649,7 +649,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
         document.addEventListener('DOMContentLoaded', () => {
             
             // --- App Version ---
-            const APP_VERSION = "v1.5.0"; // Easily updatable version string
+            const APP_VERSION = "v1.8.0"; // Updated version for new validator
             document.getElementById('version-display').textContent = APP_VERSION;
 
             // --- Inlined sha512crypt.js Function ---
@@ -1186,10 +1186,7 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 }
                 const user = { 
                     name: name,
-                    ssh_authorized_keys: [] // Initialize
                 };
-
-                // Add all optional fields
                 if (userGecos.value.trim()) user.gecos = userGecos.value.trim();
                 if (userShell.value.trim()) user.shell = userShell.value.trim();
                 if (userPrimaryGroup.value.trim()) user.primary_group = userPrimaryGroup.value.trim();
@@ -1218,10 +1215,8 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 }
 
                 if (appState.editingIndex.users !== null) {
-                    // Update existing user
                     appState.users[appState.editingIndex.users] = user;
                 } else {
-                    // Add new user
                     appState.users.push(user);
                 }
                 
@@ -1800,199 +1795,242 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 return typeof value === 'boolean' || typeof value === 'undefined';
             }
 
-            // --- UPGRADED VALIDATION FUNCTION ---
+            // --- V2 VALIDATION ENGINE ---
+            
+            // Schema definition for common cloud-init modules
+            const CLOUD_CONFIG_SCHEMA = {
+                // Top-level keys
+                'users': {
+                    type: 'list',
+                    itemType: 'object',
+                    suggestions: ['user', 'userz'],
+                    schema: {
+                        'name': { type: 'string', required: true, suggestions: ['username', 'user_name'] },
+                        'gecos': { type: 'string' },
+                        'shell': { type: 'string' },
+                        'primary_group': { type: 'string', suggestions: ['primary-group'] },
+                        'groups': { type: 'list', itemType: 'string' },
+                        'passwd': { type: 'string', suggestions: ['password'] },
+                        'plain_text_passwd': { type: 'string', suggestions: ['plain_text_password', 'plain-text-passwd'] },
+                        'ssh_authorized_keys': { type: 'list', itemType: 'string', suggestions: ['ssh_keys', 'auth_keys', 'authorized_keys'] },
+                        'expiredate': { type: 'string' }, // YYYY-MM-DD
+                        'inactive': { type: 'number' },
+                        'sudo': { type: ['string', 'boolean'] },
+                        'lock_passwd': { type: 'boolean', suggestions: ['lock_password'] },
+                        'system': { type: 'boolean' },
+                        'ssh_import_id': { type: 'list', itemType: 'string' }
+                    }
+                },
+                'groups': {
+                    type: 'list',
+                    itemType: ['string', 'object'],
+                    suggestions: ['group'],
+                    schema: { // Only applies if itemType is 'object'
+                        'name': { type: 'string', required: true, suggestions: ['group_name', 'groupname'] },
+                        'members': { type: 'list', itemType: 'string' }
+                    }
+                },
+                'packages': { type: 'list', itemType: 'string', suggestions: ['package', 'pkg'] },
+                'write_files': {
+                    type: 'list',
+                    itemType: 'object',
+                    suggestions: ['write-files', 'writefiles', 'files'],
+                    schema: {
+                        'path': { type: 'string', required: true },
+                        'permissions': { type: ['string', 'number'], suggestions: ['permission', 'perms'] },
+                        'owner': { type: 'string' },
+                        'encoding': { type: 'string', suggestions: ['encoding_type'] },
+                        'content': { type: 'string', suggestions: ['contents'] }
+                    }
+                },
+                'runcmd': { type: 'list', itemType: ['string', 'list'], suggestions: ['run_cmd', 'run-cmd'] },
+                'bootcmd': { type: 'list', itemType: ['string', 'list'], suggestions: ['boot_cmd', 'boot-cmd'] },
+                'hostname': { type: 'string' },
+                'manage_etc_hosts': { type: 'boolean', suggestions: ['manage_hosts'] },
+                'ssh_pwauth': { type: 'boolean', suggestions: ['sshpwauth', 'ssh-pwauth'] },
+                'network': { type: 'object' }, // Network config is too complex to fully validate here
+                'apt': { type: 'object', suggestions: ['apt-get'] },
+                'yum_repos': { type: 'object', suggestions: ['yum'] },
+                'final_message': { type: 'string' },
+                'power_state': { type: 'object' },
+                'phone_home': { type: 'object' },
+                'disable_root': { type: 'boolean' },
+                'preserve_hostname': { type: 'boolean' },
+                'system_info': { 
+                    type: 'object',
+                    schema: {
+                        'default_user': { 
+                            type: 'object', 
+                            suggestions: ['user', 'default-user'],
+                            schema: { 
+                                'name': { type: 'string', suggestions: ['username'] } 
+                            } 
+                        }
+                    }
+                },
+                'locale': { type: 'string' },
+                'timezone': { type: 'string' },
+                'ntp': { type: 'object' },
+                'package_update': { type: 'boolean', suggestions: ['packages_update'] },
+                'package_upgrade': { type: 'boolean', suggestions: ['packages_upgrade'] },
+                'package_reboot_if_required': { type: 'boolean' },
+                'disk_setup': { type: 'object' }, 
+                'fs_setup': { type: 'list' }, 
+                'mounts': { type: 'list' }, 
+                'chpasswd': { // <-- ADDED THIS BLOCK
+                    type: 'object',
+                    schema: {
+                        'expire': { type: 'boolean' },
+                        'users': {
+                            type: 'list',
+                            itemType: 'object',
+                            suggestions: ['userss', 'userlist'], // <-- Catches your typo
+                            schema: {
+                                'name': { type: 'string', required: true },
+                                'password': { type: 'string', required: true },
+                                'type': { type: 'string' } // 'text' or 'hashed'
+                            }
+                        }
+                    }
+                }, 
+                'resolv_conf': { type: 'object' }, 
+                'ca_certs': { type: 'object' }, 
+                'ssh_keys': { type: 'object' }, 
+                'output': { type: 'object' }, 
+                'manual_cache_clean': { type: 'boolean' },
+                'ssh_authorized_keys': { type: 'list', itemType: 'string', suggestions: ['ssh-authorized-keys', 'ssh_auth_keys'] },
+            };
+
+
+            function validateSchemaRecursive(config, schema, context, errors, warnings) {
+                if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+                    errors.push(`'${context}' is not a valid object/mapping.`);
+                    return;
+                }
+
+                const validKeys = new Set(Object.keys(schema));
+
+                // Check all keys in the user's config part
+                for (const key in config) {
+                    if (config.hasOwnProperty(key)) {
+                        const value = config[key];
+
+                        // 1. Check if key is valid
+                        if (validKeys.has(key)) {
+                            const keySchema = schema[key];
+                            const keyContext = `${context}.${key}`;
+                            
+                            // 2. Check type
+                            const expectedTypes = Array.isArray(keySchema.type) ? keySchema.type : [keySchema.type];
+                            let actualType = Array.isArray(value) ? 'list' : (value === null ? 'null' : typeof value);
+                            
+                            if (!expectedTypes.includes(actualType)) {
+                                errors.push(`'${keyContext}': Invalid type. Expected <strong>${expectedTypes.join(' or ')}</strong> but got <strong>${actualType}</strong> (value: "${value}").`);
+                                continue; // Stop checking this key if type is wrong
+                            }
+
+                            // 3. Recurse if list of objects
+                            if (actualType === 'list' && keySchema.itemType === 'object' && keySchema.schema) {
+                                value.forEach((item, index) => {
+                                    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+                                        errors.push(`'${keyContext}[${index}]': Item is not an object.`);
+                                    } else {
+                                        validateSchemaRecursive(item, keySchema.schema, `${keyContext}[${index}]`, errors, warnings);
+                                    }
+                                });
+                            }
+                            // 4. Recurse if list of other (check item type)
+                            else if (actualType === 'list' && keySchema.itemType && keySchema.itemType !== 'object') {
+                                 value.forEach((item, index) => {
+                                    const itemType = Array.isArray(item) ? 'list' : typeof item;
+                                    const expectedItemTypes = Array.isArray(keySchema.itemType) ? keySchema.itemType : [keySchema.itemType];
+                                    if (!expectedItemTypes.includes(itemType)) {
+                                         errors.push(`'${keyContext}[${index}]': Invalid item type. Expected <strong>${expectedItemTypes.join(' or ')}</strong> but got <strong>${itemType}</strong>.`);
+                                    }
+                                 });
+                            }
+                            // 5. Recurse if object
+                            else if (actualType === 'object' && keySchema.schema) {
+                                validateSchemaRecursive(value, keySchema.schema, keyContext, errors, warnings);
+                            }
+
+                        } else {
+                            // Key is not valid. Check for typos.
+                            let foundSuggestion = false;
+                            for (const validKey in schema) {
+                                if (schema[validKey].suggestions && schema[validKey].suggestions.includes(key)) {
+                                    warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Did you mean <strong>'${validKey}'</strong>?`);
+                                    foundSuggestion = true;
+                                    break;
+                                }
+                            }
+                            if (!foundSuggestion) {
+                                warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Is this a typo?`);
+                            }
+                        }
+                    }
+                }
+            }
+
+
             function validateConfig(config) {
                 const errors = [];
                 const warnings = [];
 
-                if (typeof config !== 'object' || config === null) {
+                if (typeof config !== 'object' || config === null || Array.isArray(config)) {
                      errors.push('The provided text is valid YAML but not a valid cloud-config object (must be a mapping).');
                      return { errors, warnings }; // Stop validation if it's not even an object
                 }
                 
-                // --- Schema and Typo Checking ---
-                const validTopLevelKeys = new Set([
-                    'users', 'groups', 'packages', 'write_files', 'runcmd', 'bootcmd',
-                    'hostname', 'manage_etc_hosts', 'network', 'ssh_pwauth', 
-                    'ssh_authorized_keys', 'apt', 'yum_repos', 'final_message', 
-                    'power_state', 'phone_home', 'disable_root', 'preserve_hostname', 
-                    'system_info', 'locale', 'timezone', 'ntp', 'package_update', 
-                    'package_upgrade', 'package_reboot_if_required', 'disk_setup', 
-                    'fs_setup', 'mounts', 'chpasswd', 'resolv_conf', 'ca_certs', 
-                    'ssh_keys', 'output', 'manual_cache_clean'
-                ]);
+                // Start recursive validation from the top level
+                validateSchemaRecursive(config, CLOUD_CONFIG_SCHEMA, 'config', errors, warnings);
 
-                const commonTopLevelMisspellings = {
-                    'user': 'users', // Added
-                    'userz': 'users', // Added
-                    'group': 'groups', // Added
-                    'package': 'packages', // Added
-                    'sshpwauth': 'ssh_pwauth',
-                    'ssh-pwauth': 'ssh_pwauth',
-                    'manage_hosts': 'manage_etc_hosts',
-                    'write-files': 'write_files',
-                    'writefiles': 'write_files',
-                    'run_cmd': 'runcmd',
-                    'run-cmd': 'runcmd',
-                    'boot_cmd': 'bootcmd',
-                    'boot-cmd': 'bootcmd',
-                    'ssh_auth_keys': 'ssh_authorized_keys',
-                    'ssh-authorized-keys': 'ssh_authorized_keys',
-                    'authorized_keys': 'ssh_authorized_keys (this is usually per-user, not top-level)',
-                    'apt-get': 'apt',
-                    'yum': 'yum_repos'
-                };
+                // --- Specific logic checks that schema doesn't cover ---
                 
-                // --- New Nested Schemas ---
-                const validUserKeys = new Set([
-                    'name', 'gecos', 'shell', 'primary_group', 'groups', 
-                    'passwd', 'plain_text_passwd', 'ssh_authorized_keys', 
-                    'expiredate', 'inactive', 'sudo', 'lock_passwd', 'system',
-                    'ssh_import_id' // Added another valid key example
-                ]);
-                
-                const validFileKeys = new Set([
-                    'path', 'permissions', 'owner', 'encoding', 'content'
-                ]);
-
-                const validGroupKeys = new Set(['name', 'members']);
-
-                const commonNestedMisspellings = {
-                    // User keys
-                    'username': 'name',
-                    'ssh_keys': 'ssh_authorized_keys',
-                    'auth_keys': 'ssh_authorized_keys',
-                    'authorized_keys': 'ssh_authorized_keys',
-                    'password': 'passwd',
-                    'lock_password': 'lock_passwd',
-                    'primary-group': 'primary_group',
-                    'plain-text-passwd': 'plain_text_passwd',
-                    
-                    // File keys
-                    'permission': 'permissions',
-                    'encoding_type': 'encoding',
-                    'contents': 'content'
-                };
-
-                // Helper to check keys on a nested object
-                function checkNestedKeys(obj, validKeys, context) {
-                    Object.keys(obj).forEach(key => {
-                        if (commonNestedMisspellings[key]) {
-                            warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Did you mean <strong>'${commonNestedMisspellings[key]}'</strong>?`);
-                        } else if (!validKeys.has(key)) {
-                            warnings.push(`In ${context}: Unknown key <strong>'${key}'</strong>. Is this a typo?`);
-                        }
-                    });
-                }
-                
-                const userKeys = Object.keys(config);
-                userKeys.forEach(key => {
-                    if (key === '__error') return; // Skip our internal error flag
-                    
-                    if (commonTopLevelMisspellings[key]) {
-                        warnings.push(`Unknown top-level key <strong>'${key}'</strong>. Did you mean <strong>'${commonTopLevelMisspellings[key]}'</strong>?`);
-                    } else if (!validTopLevelKeys.has(key)) {
-                        warnings.push(`Unknown top-level key <strong>'${key}'</strong>. Is this a typo?`);
-                    }
-                });
-                // --- End of Top Level Schema Check ---
-
-
                 // Users
                 if (config.users && Array.isArray(config.users)) {
                     config.users.forEach((user, i) => {
-                        if (typeof user !== 'object' || user === null) {
-                            errors.push(`User ${i+1} is not a valid object.`);
-                            return; // skip to next user
-                        }
-                        
+                        if (typeof user !== 'object' || user === null) return; // Already handled by schema check
                         const userContext = `User '${user.name || `index ${i}`}'`;
-                        checkNestedKeys(user, validUserKeys, userContext); // <-- NESTED CHECK
-
-                        if (!user.name) errors.push(`User ${i+1} (name: ${user.name || 'N/A'}) is missing a name.`);
+                        
+                        // Required check
+                        if (!user.name && user.name !== undefined) errors.push(`User ${i+1} is missing a required 'name'.`);
+                        
+                        // Logic checks
                         if (user.passwd && !user.passwd.startsWith('$6$')) {
                             warnings.push(`${userContext}: 'passwd' value doesn't start with $6$.`);
                         }
                         if (user.passwd && user.plain_text_passwd) {
                             errors.push(`${userContext}: has both 'passwd' and 'plain_text_passwd'. Please remove one.`);
                         }
-                        if (!isBooleanOrUndefined(user.lock_passwd)) {
-                            errors.push(`${userContext}: 'lock_passwd' must be true or false, not "<strong>${user.lock_passwd}</strong>".`);
-                        }
-                        if (!isBooleanOrUndefined(user.system)) {
-                            errors.push(`${userContext}: 'system' must be true or false, not "<strong>${user.system}</strong>".`);
-                        }
-                        if (user.sudo && typeof user.sudo !== 'string' && typeof user.sudo !== 'boolean') {
-                             warnings.push(`${userContext}: 'sudo' value is unusual. Expected a string or boolean, but got ${typeof user.sudo}.`);
-                        }
                     });
-                } else if (config.users) {
-                     errors.push("'users' key must be a list (array).");
                 }
-                
-                // Groups
-                if (config.groups && Array.isArray(config.groups)) {
-                    config.groups.forEach((group, i) => {
-                        if (typeof group === 'object' && group !== null) {
-                            const groupContext = `Group '${group.name || `index ${i}`}'`;
-                            checkNestedKeys(group, validGroupKeys, groupContext); // <-- NESTED CHECK
-                            if (!group.name) {
-                                errors.push(`Group object at index ${i} is missing a 'name'.`);
-                            }
-                        } else if (typeof group !== 'string') {
-                            errors.push(`Group entry at index ${i} is not a string or object.`);
-                        }
-                    });
-                } else if (config.groups) {
-                     errors.push("'groups' key must be a list (array).");
-                }
-
 
                 // Files
                 if (config.write_files && Array.isArray(config.write_files)) {
                     config.write_files.forEach((file, i) => {
-                        if (typeof file !== 'object' || file === null) {
-                            errors.push(`File ${i+1} is not a valid object.`);
-                            return; // skip to next file
-                        }
-
+                        if (typeof file !== 'object' || file === null) return; 
                         const fileContext = `File '${file.path || `index ${i}`}'`;
-                        checkNestedKeys(file, validFileKeys, fileContext); // <-- NESTED CHECK
-
-                        if (!file.path) errors.push(`File ${i+1} is missing a path.`);
-                        if (file.path && !file.path.startsWith('/')) warnings.push(`${fileContext}: path is not absolute.`);
-                        if (file.permissions && !/^[0-7]{3,4}$/.test(file.permissions) && typeof file.permissions !== 'string') {
-                            warnings.push(`${fileContext}: 'permissions' format is invalid. Use octal (e.g., 0644).`);
+                        
+                        if (!file.path) errors.push(`File ${i+1} is missing a required 'path'.`);
+                        if (file.path && !file.path.startsWith('/')) warnings.push(`${fileContext}: 'path' is not absolute.`);
+                        if (file.permissions && !/^[0-7]{3,4}$/.test(String(file.permissions))) {
+                            warnings.push(`${fileContext}: 'permissions' format is invalid. Use octal (e.g., "0644").`);
                         }
                     });
-                } else if (config.write_files) {
-                    errors.push("'write_files' key must be a list (array).");
                 }
                 
-                // Hostname
-                if (config.hostname && typeof config.hostname !== 'string') {
-                    errors.push(`'hostname' must be a string, not "<strong>${config.hostname}</strong>".`);
-                }
-                if (!isBooleanOrUndefined(config.manage_etc_hosts)) {
-                     errors.push(`'manage_etc_hosts' must be true or false, not "<strong>${config.manage_etc_hosts}</strong>".`);
-                }
-                if (!isBooleanOrUndefined(config.ssh_pwauth)) {
-                     errors.push(`'ssh_pwauth' must be true or false, not "<strong>${config.ssh_pwauth}</strong>".`);
-                }
-
                 // Network
                 if (config.network) {
                     if (config.network.__error) {
-                        errors.push(config.network.__error);
-                    }
-                    if (config.network.version === 1) {
+                        errors.push(config.network.__error); // Error from builder
+                    } else if (config.network.version === 1) {
                         if (!config.network.config || config.network.config.length === 0) {
-                            errors.push("Network v1 is selected but no interfaces were added.");
+                            errors.push("Network v1 is defined but no interfaces were found in 'config'.");
                         }
-                    }
-                    if (config.network.version === 2) {
-                         if (!config.network.ethernets && !config.network.version) { // Check if it's a raw config
-                            warnings.push("Network v2 is missing an 'ethernets' block or 'version: 2' key. This is common, but ensure your config is valid.");
+                    } else if (config.network.version === 2) {
+                         if (!config.network.ethernets && !config.network.bonds && !config.network.bridges && !config.network.vlans) {
+                            warnings.push("Network v2 is missing 'ethernets', 'bonds', 'bridges', or 'vlans' block. This is unusual.");
                          }
                     }
                 }
@@ -2000,18 +2038,26 @@ echo 'Hello from an encoded script!' > /tmp/hello.txt"></textarea>
                 return { errors, warnings };
             }
 
+            // Updated to handle formatting
             function showValidationStatus(errors, warnings, targetId) {
                 const targetElement = document.getElementById(targetId);
                 if (!targetElement) return;
                 
                 targetElement.classList.remove('hidden', 'bg-green-800', 'text-green-100', 'bg-red-800', 'text-red-100', 'bg-yellow-800', 'text-yellow-100');
                 
-                if (errors.length > 0) {
+                // 1. Sanitize all messages first
+                const cleanErrors = errors.map(e => sanitizeString(e));
+                const cleanWarnings = warnings.map(w => sanitizeString(w));
+                
+                // 2. Add emphasis to quoted text
+                const addEmphasis = (msg) => msg.replace(/'([^']*)'/g, "'<strong>$1</strong>'");
+
+                if (cleanErrors.length > 0) {
                     targetElement.classList.add('bg-red-800', 'text-red-100');
-                    targetElement.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${errors.join('</li><li>')}</li></ul>`;
-                } else if (warnings.length > 0) {
+                    targetElement.innerHTML = `<strong>Errors:</strong><ul class="list-disc list-inside text-left"><li>${cleanErrors.map(addEmphasis).join('</li><li>')}</li></ul>`;
+                } else if (cleanWarnings.length > 0) {
                     targetElement.classList.add('bg-yellow-800', 'text-yellow-100');
-                    targetElement.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${warnings.join('</li><li>')}</li></ul>`;
+                    targetElement.innerHTML = `<strong>Warnings:</strong><ul class="list-disc list-inside text-left"><li>${cleanWarnings.map(addEmphasis).join('</li><li>')}</li></ul>`;
                 } else {
                     targetElement.classList.add('bg-green-800', 'text-green-100');
                     targetElement.textContent = 'Validation Passed: Config looks good!';
