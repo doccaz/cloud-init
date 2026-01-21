@@ -1,0 +1,5 @@
+{
+  "name": "Cloud-Config Generator",
+  "description": "Visual generator for cloud-init configuration files with support for user management, packages, files, and networking.",
+  "requestFramePermissions": []
+}
