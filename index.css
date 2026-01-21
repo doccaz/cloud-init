@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar for textareas */
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937;
+}
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+textarea::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+textarea::-webkit-scrollbar-thumb {
+  background-color: #4b5563;
+  border-radius: 20px;
+  border: 3px solid #1f2937;
+}
+
+/* Github Corner */
+.github-corner:hover .octo-arm {
+  animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+  0%, 100% { transform: rotate(0) }
+  20%, 60% { transform: rotate(-25deg) }
+  40%, 80% { transform: rotate(10deg) }
+}
+@media (max-width:500px) {
+  .github-corner:hover .octo-arm { animation: none }
+  .github-corner .octo-arm { animation: octocat-wave 560ms ease-in-out }
+}

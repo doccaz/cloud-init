@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -20,23 +20,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Setup Node
+
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
           cache: 'npm'
-          
+
       - name: Install dependencies
-        run: npm install
-        
+        run: npm ci
+
       - name: Build
         run: npm run build
-        env:
-          # If you have an API key for the build process, add it to repository secrets
-          # API_KEY: ${{ secrets.API_KEY }}
-          CI: false # Prevents build failure on warnings
-          
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
